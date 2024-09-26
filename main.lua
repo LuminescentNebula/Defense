@@ -28,6 +28,7 @@ function love.load()
         spawner = love.graphics.newImage("res/spawner.png"),
         turret = love.graphics.newImage("res/turret.png"),
         cursor = love.graphics.newImage("res/cursor.png"),
+        cursor2 = love.graphics.newImage("res/cursor2.png"),
         boss = love.graphics.newImage("res/boss.png"),
         enemy = love.graphics.newImage("res/enemy.png"),
         bomb = love.graphics.newImage("res/bomb.png"),
@@ -43,7 +44,7 @@ function love.load()
     -- Enemy list
     enemies = {}
 
-    -- Timer for enemy spawning
+    -- Timer enemy spawning
     spawnTimer = 0
     goldTimer = 0
     increaserTimer = 0
@@ -61,19 +62,38 @@ function love.load()
         {0,1,1}
     }
     imagedatas = {
-        mapPixel(function(x, y, r, g, b, a) return r, 1, b, a end),
-        mapPixel(function(x, y, r, g, b, a) return r, g, 1, a end),
-        mapPixel(function(x, y, r, g, b, a) return 1, 1, b, a end),
-        mapPixel(function(x, y, r, g, b, a) return r, 1, 1, a end)
+        function(x, y, r, g, b, a) return r, 1, b, a end,
+        function(x, y, r, g, b, a) return r, g, 1, a end,
+        function(x, y, r, g, b, a) return 1, 1, b, a end,
+        function(x, y, r, g, b, a) return r, 1, 1, a end
     }
+    cursors ={}
+    for i = 1, #imagedatas do
+        cursorData = love.image.newImageData("res/cursor.png")
+        image = love.graphics.newImage(cursorData)
+        cursorData:mapPixel(imagedatas[i])
+        image:replacePixels(cursorData)
+        table.insert(cursors,image)
+    end
+
     keys = {
         {"up","down","left","right","/"},
-        {"kp8","kp5","kp4","kp6","kp7"}
+        {"kp8","kp5","kp4","kp6","kp7"},
+        {"w","s","a","d","q"},
+        {"u","j","h","k","y"}
     }
     players = {}
-    createPlayers(2)
+    createPlayers(4)
 
     count =0
+end
+
+function resizeCanvas()
+    if #players <=3 then
+        return love.graphics.newCanvas(math.floor(width/#players), math.floor(height))
+    else 
+        return love.graphics.newCanvas(math.floor(width/2), math.floor(height/2))
+    end
 end
 
 function createPlayers(n)
@@ -85,10 +105,12 @@ function createPlayers(n)
         attacks = {},
         gold = 100,
         keys = keys[i],
-        canvas = love.graphics.newCanvas(math.floor(width/n), math.floor(height/n))})
-        placeBase(i,math.floor((gridSize/2)/n), math.floor((gridSize/2)/n))
-        placeCursor(players[i], math.floor((gridSize/2)/n), math.floor((gridSize/2)/n))
+        canvas = nil})
+        local x = (i>2 and gridSize-5 or 5) 
+        local y = (math.mod(i,2)==1 and gridSize-5 or 5) 
+        placeBaseAndCursor(players[i], x, y )
     end
+    love.resize(width,height)
 end
 
 -- Initialize the grid with empty cells
@@ -109,25 +131,22 @@ function love.resize(x,y)
     width = x
     height = y
     for i = 1, #players do
-       players[i].canvas = love.graphics.newCanvas(math.floor(width/#players), math.floor(height/#players))
+       players[i].canvas = resizeCanvas()
     end
 end
 
-function placeBase(n, row, col)
+function placeBaseAndCursor(player, row, col)
     for r = row, row + baseHeight - 1 do
         for c = col, col + baseWidth - 1 do
             print(r.." "..c)
-            local unit = {n = n, type="base", row = r, col = c, hp = 50, maxHP = 50, 
+            local unit = {n = player.n, type="base", row = r, col = c, hp = 50, maxHP = 50, 
                             upgraded = false, cooldown = 0, maxCooldown = 1, radius = 7, power = 1, attackable = true, one=true}
             grid[r][c].type = unit
-            table.insert(players[n].units, unit)
+            table.insert(player.units, unit)
         end
-    end    
-end
-
-function placeCursor(player, row,col)
+    end   
     player.cursor = {n=n,row = row, col = col}
-    grid[row][col].cursor=true
+    grid[row][col].cursor=true 
 end
 
 -- Place the spawner in the grid
@@ -135,7 +154,6 @@ function placeSpawner(row, col)
     local spawner = {type= "spawner", row = row, col = col}
     grid[row][col].type = spawner
     table.insert(spawners,spawner)
-
 end
 
 -- Spawn an enemy at the spawner location
@@ -565,9 +583,8 @@ function drawCursors(player)
     local y = (player.cursor.row - 1) * cellSize
 
     love.graphics.setColor(1,1,1,1)
-    love.graphics.draw(tokens.cursor, x, y, 0,1, 1)
-    love.graphics.setColor(colors[player.n])
-    love.graphics.draw(tokens.cursor, x+5, y+5,0, 0.9, 0.9)
+    love.graphics.draw(cursors[player.n], x, y, 0, 1, 1)
+    love.graphics.draw(tokens.cursor2, x, y, 0, 1, 1)
 
     love.graphics.setColor(0, 0, 0, 0.5)
     love.graphics.draw(tokens[player.nextUnit], x, y)
@@ -578,15 +595,55 @@ function drawUI()
     --love.graphics.print(tostring(gold), gridSize*cellSize+2,25)
 end
 
+function drawlayout()
+    love.graphics.setBlendMode("alpha", "premultiplied")
+    if #players <=3 then
+        for i = 1, #players do
+            love.graphics.setColor(1,1,1, 1)
+            love.graphics.draw(players[i].canvas, width*(i-1)/#players, 0)
+
+            love.graphics.setColor(0,0,0,1)
+            love.graphics.setLineWidth( 5 )
+            love.graphics.line(width*(i-1)/#players,0,width*(i-1)/#players,height)
+        end
+    else 
+        love.graphics.setColor(1, 1, 1, 1)
+        for i = 1, #players do
+            if i > 2 then
+                love.graphics.draw(players[i].canvas, 
+                (width/2),
+                (height/2)*math.mod((i+1),2))
+            else 
+                love.graphics.draw(players[i].canvas, 
+                0,
+                (height/2)*math.mod((i+1),2))
+            end
+        end
+        love.graphics.setColor(0,0,0,1)
+        love.graphics.setLineWidth( 5 )
+        love.graphics.line(0,height/2,width,height/2)
+        love.graphics.line(width/2,0,width/2,height)
+    end
+    love.graphics.setBlendMode("alpha")
+
+end
+
 function love.draw()
     for i = 1, #players do
         love.graphics.setCanvas(players[i].canvas)
         love.graphics.clear(0, 0, 0, 0)
         love.graphics.push()
-        love.graphics.translate(--TODO
-            -math.floor(players[i].cursor.col*cellSize-width/2), 
-            -math.floor(players[i].cursor.row*cellSize-height/2))
-
+        if #players <=3 then
+            love.graphics.translate(
+                -math.floor(players[i].cursor.col*cellSize-width/(2*#players)), 
+                -math.floor(players[i].cursor.row*cellSize-height/2)
+            )
+        else 
+            love.graphics.translate(
+                -math.floor(players[i].cursor.col*cellSize-width/4), 
+                -math.floor(players[i].cursor.row*cellSize-height/4)
+        )
+        end
         drawGrid()
 
         for j = 1, #players,1 do
@@ -599,11 +656,5 @@ function love.draw()
     end
     love.graphics.setCanvas()
 
-    love.graphics.setBlendMode("alpha", "premultiplied")
-    love.graphics.setColor(1,1,1, 1)
-    for i = 1, #players do
-        love.graphics.draw(players[i].canvas, width*(i-1)/#players, 0)
-    end
-    love.graphics.setBlendMode("alpha")
-
+    drawlayout()
 end
