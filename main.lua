@@ -78,12 +78,12 @@ function love.load()
 
     keys = {
         {"up","down","left","right","/"},
-        {"kp8","kp5","kp4","kp6","kp7"},
+        {"k p8","kp5","kp4","kp6","kp7"},
         {"w","s","a","d","q"},
         {"u","j","h","k","y"}
     }
     players = {}
-    createPlayers(4)
+    createPlayers(3)
 
     count =0
 end
@@ -161,14 +161,19 @@ function spawnEnemy()
     for i = #spawners, 1, -1 do
         local spawner = spawners[i] 
         if grid[spawner.row][spawner.col].enemy == nil then
-            table.insert(enemies, {row = spawner.row, col = spawner.col, moveTimer = 0, moveCooldown = 1/(increaser/2.5),
-                        hp=math.floor(5*(increaser-2)), maxHP = math.floor(5*(increaser-2)), power=1*increaser-2, award = math.floor(5*(increaser-3))})
-            
+            table.insert(enemies, {row = spawner.row, col = spawner.col, moveTimer = 0, moveCooldown = (1/increaser)*2.5,
+                        hp=math.floor(5*(increaser-2)), maxHP = math.floor(5*(increaser-2)), 
+                        power=math.floor(1*increaser-2), award = math.floor(5*(increaser-2))})
             count = count + 1
             print("Enemies: "..count.." Alive: "..#enemies)
             grid[spawner.row][spawner.col].enemy = true
         end
     end
+    print("|||||||||")
+    print("Increaser"..increaser)
+    print("hp"..math.floor(5*(increaser-2)))
+    print("power"..math.floor(1*increaser-2))
+    print("award"..(math.floor(5*(increaser-2))))
 end
 
 function removeEnemy(index)
@@ -181,7 +186,7 @@ function spawnUnit(n,x,y)
     if players[n].nextUnit == "turret" then
         unit = {n=n, type = "turret", row = x, col = y, cooldown = 0, maxCooldown = 1, power=1, hp=10, maxHP=10, upgraded = false, radius = 5, attackable = true, one = true}
     elseif players[n].nextUnit == "bomb" then
-        unit = {n=n, type = "bomb", row = x, col = y, radius = 5, power=10, hp=1, maxHP=1, upgraded = false, attackable = false, one = false}
+        unit = {n=n, type = "bomb", row = x, col = y, radius = 2, power=10, hp=1, maxHP=1, upgraded = false, attackable = false, one = false}
     elseif players[n].nextUnit == "wall" then
         unit = {n=n, type = "wall", row = x, col = y, hp=30, maxHP=30, upgraded = false, attackable = false,}
     elseif players[n].nextUnit == "tesla" then
@@ -200,7 +205,7 @@ function updateTimers(dt)
 
     -- Spawn an enemy every 5 seconds
     if spawnTimer >= spawnInterval then
-        --spawnEnemy()
+        spawnEnemy()
         spawnTimer = 0
     end
 
@@ -217,7 +222,7 @@ function updateTimers(dt)
     if increaserTimer >= increaserInterval then
         increaserTimer = 0
         if increaser < 10  then
-            increaser=increaser+0.1
+            increaser=increaser+0.3
             spawnInterval = defaultSpawnInterval/increaser
             --print(increaser)
         end
@@ -291,6 +296,7 @@ function attack(dt)
 end
 
 function attackBomb(bomb) --TODO add damage to structures
+    --FIx radius
     for j = 1, #enemies do
         local enemy = enemies[j]
 
@@ -464,7 +470,7 @@ function love.keypressed(key)
         local cursor = player.cursor
 
         moveCursor(player, cursor, key)
-        --TODO: не давать upgrade если все апгрейднуто, не давать 2 одиаковых
+        --TODO: не давать upgrade если все апгрейднуто
         if key == player.keys[5] and grid[cursor.row][cursor.col].enemy == nil then 
             local row = cursor.row
             local col = cursor.col
@@ -488,6 +494,9 @@ function love.keypressed(key)
                     if grid[row][col].type.type == "wall"  or grid[row][col].type.type == "base"  then
                         grid[row][col].type.hp = grid[row][col].type.maxHP*2
                         grid[row][col].type.maxHP = grid[row][col].type.maxHP*2
+                    elseif player.nextUnit == "bomb" then
+                        grid[row][col].type.power = grid[row][col].type.power*2
+                        grid[row][col].type.radius = math.floor(grid[row][col].type.radius*1.5)
                     else
                         grid[row][col].type.power = grid[row][col].type.power*2
                     end
