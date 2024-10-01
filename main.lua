@@ -1,10 +1,6 @@
-function love.load()
-    menu = {
-        visible = true,
-        selected = 1,
-        options = {"1 Player", "2 Players", "3 Players", "4 Players"}
-    }
+local ui = require("ui")
 
+function love.load()
     -- Grid size and cell dimensions
     gridSize = 20
     
@@ -364,7 +360,7 @@ function removeEnemiesOnUnits(enemy)
 end
 
 function love.update(dt)
-    if not menu.visible then
+    if not ui.visible then
         updateTimers(dt)
         removable = {}
 
@@ -516,17 +512,8 @@ function useCursor(player,cursor,key)
 end
 
 function love.keypressed(key)
-    if menu.visible then
-        if key == "up" then
-            menu.selected = math.max(1, menu.selected - 1)
-        elseif key == "down" then
-            menu.selected = math.min(#menu.options, menu.selected + 1)
-        elseif key == "return" then
-            -- Set the number of players based on the selected option
-            players = {}
-            createPlayers(menu.selected)
-            menu.visible = false
-        end
+    if ui.visible then
+        ui:handleInput(key)
     else 
         for i=1,#players do 
             local player = players[i]
@@ -664,26 +651,9 @@ function drawlayout()
 
 end
 
-function drawMenu()
-    if menu.visible then
-        love.graphics.setColor(1,1,1)
-        love.graphics.rectangle("fill", 0,0,width,height)
-        love.graphics.setColor(0, 0, 0)
-        for i, option in ipairs(menu.options) do
-            if i == menu.selected then
-                love.graphics.setColor(1, 0, 0)
-            else
-                love.graphics.setColor(0, 0, 0)
-            end
-            love.graphics.print(option, width / 2 - 50, height / 2 - 25 + (i - 1) * 25)
-        end
-        return true
-    end
-    return false
-end
 
 function love.draw()
-    if not drawMenu() then
+    if not ui.visible then
         for i = 1, #players do
             love.graphics.setCanvas(players[i].canvas)
             love.graphics.clear(0, 0, 0, 0)
@@ -717,5 +687,7 @@ function love.draw()
         love.graphics.setCanvas()
 
         drawlayout()
+    else 
+        ui:draw()
     end
 end
