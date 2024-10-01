@@ -1,4 +1,10 @@
 function love.load()
+    menu = {
+        visible = true,
+        selected = 1,
+        options = {"1 Player", "2 Players", "3 Players", "4 Players"}
+    }
+
     -- Grid size and cell dimensions
     gridSize = 20
     
@@ -11,8 +17,8 @@ function love.load()
     increaserInterval = 5
     goldInterval = 2
     -- Base dimensions (2 cells wide)
-    baseWidth = 2
-    baseHeight = 2
+    baseWidth = 1
+    baseHeight = 1
 
     flags={resizable = true}
     -- window size
@@ -78,12 +84,12 @@ function love.load()
 
     keys = {
         {"up","down","left","right","/"},
-        {"k p8","kp5","kp4","kp6","kp7"},
+        {"kp8","kp5","kp4","kp6","kp7"},
         {"w","s","a","d","q"},
         {"u","j","h","k","y"}
     }
     players = {}
-    createPlayers(3)
+    --createPlayers(3)
 
     count =0
 end
@@ -100,8 +106,10 @@ function createPlayers(n)
     for i=1,n do
         table.insert(players,
         {n = i,
+        finish = false,
         nextUnit = "turret",
         units = {},
+        bases = baseHeight*baseWidth,
         attacks = {},
         gold = 100,
         keys = keys[i],
@@ -138,7 +146,6 @@ end
 function placeBaseAndCursor(player, row, col)
     for r = row, row + baseHeight - 1 do
         for c = col, col + baseWidth - 1 do
-            print(r.." "..c)
             local unit = {n = player.n, type="base", row = r, col = c, hp = 50, maxHP = 50, 
                             upgraded = false, cooldown = 0, maxCooldown = 1, radius = 7, power = 1, attackable = true, one=true}
             grid[r][c].type = unit
@@ -169,11 +176,6 @@ function spawnEnemy()
             grid[spawner.row][spawner.col].enemy = true
         end
     end
-    print("|||||||||")
-    print("Increaser"..increaser)
-    print("hp"..math.floor(5*(increaser-2)))
-    print("power"..math.floor(1*increaser-2))
-    print("award"..(math.floor(5*(increaser-2))))
 end
 
 function removeEnemy(index)
@@ -325,7 +327,13 @@ function removeUnit(row,col)
     for j = #players,1,-1 do
         for i = #players[j].units, 1, -1 do
             if row == players[j].units[i].row and col == players[j].units[i].col then
-                print(players[j].units[i].type.." removed")
+                --print(players[j].units[i].type.." removed")
+                if players[j].units[i].type == "base" then
+                    players[j].bases = players[j].bases-1
+                    if players[j].bases == 0 then
+                        players[j].finish = true
+                    end
+                end
                 table.remove(players[j].units, i)
                 grid[row][col].type = nil
                 break
@@ -356,26 +364,28 @@ function removeEnemiesOnUnits(enemy)
 end
 
 function love.update(dt)
-    updateTimers(dt)
-    removable = {}
+    if not menu.visible then
+        updateTimers(dt)
+        removable = {}
 
-    for i = #enemies, 1, -1 do
-        local enemy = enemies[i]
-        updateEnemyMovement(enemy, dt)
-        
-        if removeEnemiesOnUnits(enemy) then
-            removable[tostring(i)]=i
+        for i = #enemies, 1, -1 do
+            local enemy = enemies[i]
+            updateEnemyMovement(enemy, dt)
+            
+            if removeEnemiesOnUnits(enemy) then
+                removable[tostring(i)]=i
+            end
         end
-    end
 
-    attack(dt)
-    ordered = {}
-    for k, v in pairs(removable) do
-        table.insert(ordered,v)
-    end
-    table.sort(ordered)
-    for i = #ordered,1,-1 do 
-        removeEnemy(ordered[i])
+        attack(dt)
+        ordered = {}
+        for k, v in pairs(removable) do
+            table.insert(ordered,v)
+        end
+        table.sort(ordered)
+        for i = #ordered,1,-1 do 
+            removeEnemy(ordered[i])
+        end
     end
 end
 
@@ -464,49 +474,66 @@ function selectNextUnit(player)
     end
 end
 
-function love.keypressed(key)
-    for i=1,#players do 
-        local player = players[i]
-        local cursor = player.cursor
-
-        moveCursor(player, cursor, key)
-        --TODO: не давать upgrade если все апгрейднуто
-        if key == player.keys[5] and grid[cursor.row][cursor.col].enemy == nil then 
-            local row = cursor.row
-            local col = cursor.col
-            if player.nextUnit ~= "upgrade" and player.nextUnit ~= "heal" then
-                if  grid[row][col].type == nil then
-                    if  player.nextUnit == "bomb" or --Bomb can be placed anywhere
-                        (grid[row+1] ~= nil and grid[row+1][col] ~= nil and grid[row+1][col].type ~= nil and grid[row+1][col].type.n == player.n) or --Has unit on one of the sides
-                        (grid[row-1] ~= nil and grid[row-1][col] ~= nil and grid[row-1][col].type ~= nil and grid[row-1][col].type.n == player.n) or
-                        (grid[row][col+1] ~= nil and grid[row][col+1].type ~= nil and grid[row][col+1].type.n == player.n) or
-                        (grid[row][col-1] ~= nil and grid[row][col-1].type ~= nil and grid[row][col-1].type.n == player.n) then
-                        if player.gold >= 20 then
-                            if spawnUnit(player.n,row,col) ~= nil then
-                                player.gold = player.gold - 20
-                                selectNextUnit(player)
-                            end
+function useCursor(player,cursor,key)
+    --TODO: не давать upgrade если все апгрейднуто
+    if key == player.keys[5] and grid[cursor.row][cursor.col].enemy == nil then 
+        local row = cursor.row
+        local col = cursor.col
+        if player.nextUnit ~= "upgrade" and player.nextUnit ~= "heal" then
+            if  grid[row][col].type == nil then
+                if  player.nextUnit == "bomb" or --Bomb can be placed anywhere
+                    (grid[row+1] ~= nil and grid[row+1][col] ~= nil and grid[row+1][col].type ~= nil and grid[row+1][col].type.n == player.n) or --Has unit on one of the sides
+                    (grid[row-1] ~= nil and grid[row-1][col] ~= nil and grid[row-1][col].type ~= nil and grid[row-1][col].type.n == player.n) or
+                    (grid[row][col+1] ~= nil and grid[row][col+1].type ~= nil and grid[row][col+1].type.n == player.n) or
+                    (grid[row][col-1] ~= nil and grid[row][col-1].type ~= nil and grid[row][col-1].type.n == player.n) then
+                    if player.gold >= 20 then
+                        if spawnUnit(player.n,row,col) ~= nil then
+                            player.gold = player.gold - 20
+                            selectNextUnit(player)
                         end
                     end
                 end
-            elseif grid[row][col].type ~= nil and grid[row][col].type.n == player.n then
-                if  player.nextUnit == "upgrade" and grid[row][col].type.upgraded == false then
-                    if grid[row][col].type.type == "wall"  or grid[row][col].type.type == "base"  then
-                        grid[row][col].type.hp = grid[row][col].type.maxHP*2
-                        grid[row][col].type.maxHP = grid[row][col].type.maxHP*2
-                    elseif player.nextUnit == "bomb" then
-                        grid[row][col].type.power = grid[row][col].type.power*2
-                        grid[row][col].type.radius = math.floor(grid[row][col].type.radius*1.5)
-                    else
-                        grid[row][col].type.power = grid[row][col].type.power*2
-                    end
-                    grid[row][col].type.upgraded = true
-                    selectNextUnit(player)
-                elseif player.nextUnit == "heal" then
-                    grid[row][col].type.hp = grid[row][col].type.maxHP
-                    selectNextUnit(player)
-                end
             end
+        elseif grid[row][col].type ~= nil and grid[row][col].type.n == player.n then
+            if  player.nextUnit == "upgrade" and grid[row][col].type.upgraded == false then
+                if grid[row][col].type.type == "wall"  or grid[row][col].type.type == "base"  then
+                    grid[row][col].type.hp = grid[row][col].type.maxHP*2
+                    grid[row][col].type.maxHP = grid[row][col].type.maxHP*2
+                elseif player.nextUnit == "bomb" then
+                    grid[row][col].type.power = grid[row][col].type.power*2
+                    grid[row][col].type.radius = math.floor(grid[row][col].type.radius*1.5)
+                else
+                    grid[row][col].type.power = grid[row][col].type.power*2
+                end
+                grid[row][col].type.upgraded = true
+                selectNextUnit(player)
+            elseif player.nextUnit == "heal" then
+                grid[row][col].type.hp = grid[row][col].type.maxHP
+                selectNextUnit(player)
+            end
+        end
+    end
+end
+
+function love.keypressed(key)
+    if menu.visible then
+        if key == "up" then
+            menu.selected = math.max(1, menu.selected - 1)
+        elseif key == "down" then
+            menu.selected = math.min(#menu.options, menu.selected + 1)
+        elseif key == "return" then
+            -- Set the number of players based on the selected option
+            players = {}
+            createPlayers(menu.selected)
+            menu.visible = false
+        end
+    else 
+        for i=1,#players do 
+            local player = players[i]
+            local cursor = player.cursor
+
+            moveCursor(player, cursor, key)
+            useCursor(player,cursor, key)
         end
     end
 end
@@ -637,33 +664,58 @@ function drawlayout()
 
 end
 
-function love.draw()
-    for i = 1, #players do
-        love.graphics.setCanvas(players[i].canvas)
-        love.graphics.clear(0, 0, 0, 0)
-        love.graphics.push()
-        if #players <=3 then
-            love.graphics.translate(
-                -math.floor(players[i].cursor.col*cellSize-width/(2*#players)), 
-                -math.floor(players[i].cursor.row*cellSize-height/2)
-            )
-        else 
-            love.graphics.translate(
-                -math.floor(players[i].cursor.col*cellSize-width/4), 
-                -math.floor(players[i].cursor.row*cellSize-height/4)
-        )
+function drawMenu()
+    if menu.visible then
+        love.graphics.setColor(1,1,1)
+        love.graphics.rectangle("fill", 0,0,width,height)
+        love.graphics.setColor(0, 0, 0)
+        for i, option in ipairs(menu.options) do
+            if i == menu.selected then
+                love.graphics.setColor(1, 0, 0)
+            else
+                love.graphics.setColor(0, 0, 0)
+            end
+            love.graphics.print(option, width / 2 - 50, height / 2 - 25 + (i - 1) * 25)
         end
-        drawGrid()
-
-        for j = 1, #players,1 do
-            drawCursors(players[j])
-            drawHP(players[j])
-            drawAttacks(players[j])
-        end
-
-        love.graphics.pop()
+        return true
     end
-    love.graphics.setCanvas()
+    return false
+end
 
-    drawlayout()
+function love.draw()
+    if not drawMenu() then
+        for i = 1, #players do
+            love.graphics.setCanvas(players[i].canvas)
+            love.graphics.clear(0, 0, 0, 0)
+            love.graphics.push()
+            if #players <=3 then
+                love.graphics.translate(
+                    -math.floor(players[i].cursor.col*cellSize-width/(2*#players)), 
+                    -math.floor(players[i].cursor.row*cellSize-height/2)
+                )
+            else 
+                love.graphics.translate(
+                    -math.floor(players[i].cursor.col*cellSize-width/4), 
+                    -math.floor(players[i].cursor.row*cellSize-height/4)
+            )
+            end
+
+            if (players[i].finish == true) then 
+                love.graphics.setColor(1,1,1,1)
+                love.graphics.print("END",players[i].cursor.col*cellSize,players[i].cursor.row*cellSize,0,2,2,0.5,0.5)
+            else 
+                drawGrid()
+
+                for j = 1, #players,1 do
+                    drawCursors(players[j])
+                    drawHP(players[j])
+                    drawAttacks(players[j])
+                end
+            end
+            love.graphics.pop()
+        end
+        love.graphics.setCanvas()
+
+        drawlayout()
+    end
 end
