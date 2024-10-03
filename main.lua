@@ -23,7 +23,7 @@ function love.load()
     height = cellSize*10
     love.window.setMode( width, height, flags )
     -- Initialize the grid
-    initializeGrid()
+    initializeGrid(gridSize)
 
     tokens = {
         base = love.graphics.newImage("res/base.png"),
@@ -79,10 +79,10 @@ function love.load()
     end
 
     keys = {
-        {"up","down","left","right","/"},
-        {"kp8","kp5","kp4","kp6","kp7"},
         {"w","s","a","d","q"},
-        {"u","j","h","k","y"}
+        {"u","j","h","k","y"},
+        {"up","down","left","right","/"},
+        {"kp8","kp5","kp4","kp6","kp7"}
     }
     players = {}
     --createPlayers(3)
@@ -109,16 +109,21 @@ function createPlayers(n)
         attacks = {},
         gold = 100,
         keys = keys[i],
+        stats = {
+          kills = 0,
+          time = 0  
+        },
         canvas = nil})
         local x = (i>2 and gridSize-5 or 5) 
         local y = (math.mod(i,2)==1 and gridSize-5 or 5) 
         placeBaseAndCursor(players[i], x, y )
     end
+    remain = #players
     love.resize(width,height)
 end
 
 -- Initialize the grid with empty cells
-function initializeGrid()
+function initializeGrid(gridSize)
     grid = {}
     for row = 1, gridSize do
         grid[row] = {}
@@ -270,6 +275,7 @@ function attack(dt)
                                 if enemy.hp <= 0 then
                                     if removable[tostring(j)] == nil then
                                         players[k].gold = players[k].gold + enemy.award
+                                        players[k].stats.kills = players[k].stats.kills + 1
                                         removable[tostring(j)]=j
                                     end
                                 end
@@ -298,14 +304,16 @@ function attackBomb(bomb) --TODO add damage to structures
     for j = 1, #enemies do
         local enemy = enemies[j]
 
-        local distance = math.abs(bomb.row - bomb.row) +
-                        math.abs(bomb.col - bomb.col)
+        local distance = math.abs(enemy.row - bomb.row) +
+                        math.abs(enemy.col - bomb.col)
 
         if distance <= bomb.radius then
             enemies[j].hp = enemies[j].hp-bomb.power
             if enemies[j].hp <= 0 then
                 if removable[tostring(j)] == nil then
                     players[bomb.n].gold = players[bomb.n].gold + enemies[j].award
+                    players[bomb.n].stats.kills = players[bomb.n].stats.kills + 1
+
                     removable[tostring(j)] = j
                 end
             end
@@ -328,6 +336,18 @@ function removeUnit(row,col)
                     players[j].bases = players[j].bases-1
                     if players[j].bases == 0 then
                         players[j].finish = true
+                        remain = remain - 1
+                        if remain == 1 then
+                            ui.visible = true
+                            ui.menu = false
+                            for g = #players,1,-1 do
+                                if players[g].finish == false then
+                                    ui.winner = colors[g]
+                                    break
+                                end
+                            end
+                            break
+                        end
                     end
                 end
                 table.remove(players[j].units, i)
@@ -382,9 +402,15 @@ function love.update(dt)
         for i = #ordered,1,-1 do 
             removeEnemy(ordered[i])
         end
+
+        for i = #players, 1, -1 do
+            if not players[i].finish then
+                players[i].stats.time = players[i].stats.time + dt
+            end
+        end
+
     end
 end
-
 
 function findClosestUnit(enemy)
     minDist = gridSize*2
@@ -406,7 +432,6 @@ function findClosestUnit(enemy)
     end
     return minUnit
 end
-
 
 function moveUpDown(rowDiff,enemy)
     if rowDiff > 0 then
@@ -464,6 +489,7 @@ function updateEnemyMovement(enemy, dt)
 end
 
 function selectNextUnit(player)
+        --TODO: не давать upgrade если все апгрейднуто
     oldUnit = player.nextUnit
     while oldUnit == player.nextUnit do
         player.nextUnit=unitsVariants[math.random(#unitsVariants)]
@@ -471,7 +497,6 @@ function selectNextUnit(player)
 end
 
 function useCursor(player,cursor,key)
-    --TODO: не давать upgrade если все апгрейднуто
     if key == player.keys[5] and grid[cursor.row][cursor.col].enemy == nil then 
         local row = cursor.row
         local col = cursor.col
@@ -512,19 +537,15 @@ function useCursor(player,cursor,key)
 end
 
 function love.keypressed(key)
-    if ui.visible then
-        ui:handleInput(key)
-    else 
-        for i=1,#players do 
-            local player = players[i]
-            local cursor = player.cursor
-
-            moveCursor(player, cursor, key)
-            useCursor(player,cursor, key)
-        end
+    print(key)
+    ui:handleInput(key)
+    
+    for i=1,#players do 
+        moveCursor(players[i], players[i].cursor, key)
+        useCursor(players[i], players[i].cursor, key)
     end
-end
 
+end
 
 function drawHP(player)
     local units = player.units
@@ -585,6 +606,12 @@ function drawGrid()
                     love.graphics.setColor(colors[grid[row][col].type.n])
                     love.graphics.rectangle("fill", x, y, cellSize, cellSize)
                     love.graphics.draw(tokens[grid[row][col].type.type], x, y)
+                    if grid[row][col].type.type == "base" then
+                        love.graphics.push()
+                        love.graphics.setColor(0,0,0,0.7)
+                        love.graphics.print(players[grid[row][col].type.n].gold,x,y)
+                        love.graphics.pop()
+                    end
                     if grid[row][col].type.upgraded == true then
                         love.graphics.draw(tokens.upgrade, x, y, 0, 0.2,0.2)
                     end
@@ -611,11 +638,6 @@ function drawCursors(player)
 
     love.graphics.setColor(0, 0, 0, 0.5)
     love.graphics.draw(tokens[player.nextUnit], x, y)
-end
-
-function drawUI()
-    --love.graphics.setColor(1, 1, 1) -- White for the text
-    --love.graphics.print(tostring(gold), gridSize*cellSize+2,25)
 end
 
 function drawlayout()
@@ -651,7 +673,6 @@ function drawlayout()
 
 end
 
-
 function love.draw()
     if not ui.visible then
         for i = 1, #players do
@@ -672,7 +693,9 @@ function love.draw()
 
             if (players[i].finish == true) then 
                 love.graphics.setColor(1,1,1,1)
-                love.graphics.print("END",players[i].cursor.col*cellSize,players[i].cursor.row*cellSize,0,2,2,0.5,0.5)
+                love.graphics.print("Kills: "..players[i].stats.kills.."\nTime: "..players[i].stats.time,
+                    players[i].cursor.col*cellSize,players[i].cursor.row*cellSize,0,1,1,
+                    0.5,0.5)
             else 
                 drawGrid()
 
